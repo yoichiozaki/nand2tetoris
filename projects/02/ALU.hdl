@@ -42,5 +42,44 @@ CHIP ALU {
         ng; // 1 if (out < 0),  0 otherwise
 
     PARTS:
-   // Put you code here:
+    // Put you code here:
+    DMux4Way16(in=x, sel[1]=zx, sel[0]=nx, a=X, b=willNotX, c=willZeroX, d=willZeroNotX);
+    DMux4Way16(in=y, sel[1]=zy, sel[0]=ny, a=Y, b=willNotY, c=willZeroY, d=willZeroNotY);
+
+    Not16(in=willNotX, out=notX);
+    And16(a=false, b=willZeroX, out=zeroX);
+    And16(a=false, b=willZeroNotX, out=notYetX);
+    Not16(in=notYetX, out=zeroNotX);
+
+    Not16(in=willNotY, out=notY);
+    And16(a=false, b=willZeroY, out=zeroY);
+    And16(a=false, b=willZeroNotY, out=notYetY);
+    Not16(in=notYetY, out=zeroNotY);
+
+    Mux4Way16(a=X, b=notX, c=zeroX, d=zeroNotX, sel[1]=zx, sel[0]=nx, out=x1);
+    Mux4Way16(a=Y, b=notY, c=zeroY, d=zeroNotY, sel[1]=zy, sel[0]=ny, out=y1);
+
+    DMux4Way16(in=x1, sel[1]=f, sel[0]=no, a=willAndX, b=willAndNotX, c=willAddX, d=willAddNotX);
+    DMux4Way16(in=y1, sel[1]=f, sel[0]=no, a=willAndY, b=willAndNotY, c=willAddY, d=willAddNotY);
+
+    And16(a=willAndX, b=willAndY, out=andXY);
+    And16(a=willAndNotX, b=willAndNotY, out=notYetAndNotXY);
+    Not16(in=notYetAndNotXY, out=andNotXY);
+    Add16(a=willAddX, b=willAddY, out=addXY);
+    Add16(a=willAddNotX, b=willAddNotY, out=notYetAddNotXY);
+    Not16(in=notYetAddNotXY, out=addNotXY);
+
+    Mux4Way16(a=andXY, b=andNotXY, c=addXY, d=addNotXY, sel[1]=f, sel[0]=no, out=tmpout);
+
+    // set out
+    And16(a=tmpout, b=true, out=out);
+
+    // set zr
+    Or16Way(in=tmpout, out=digitsOr);
+    Xor(a=true, b=digitsOr, out=zr);
+
+    // set ng
+    And16(a=tmpout, b[15]=true, b[0..14]=false, out=MSBs);
+    Or16Way(in=MSBs, out=MSB);
+    Xor(a=MSB, b=false, out=ng);
 }
