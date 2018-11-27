@@ -17,4 +17,9 @@ CHIP PC {
 
     PARTS:
     // Put your code here:
+    Mux16(a=prevCounter, b=in, sel=load, out=preNextValue);
+    Mux16(a=preNextValue, b=false, sel=reset, out=nextValue);
+    Register(in=nextValue, load=true, out=out, out=notChanged);
+    Inc16(in=notChanged, out=didInc);
+    Mux16(a=notChanged, b=didInc, sel=inc, out=prevCounter);
 }
