@@ -40,4 +40,121 @@ CHIP CPU {
 
     PARTS:
     // Put your code here:
+
+    // the structure of instruction looks like below.
+    //
+    // <------------------------------------ 16bit ------------------------------------> 
+    // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
+    // | 15 | 14 | 13 | 12 | 11 | 10 | 9  | 8  | 7  | 6  | 5  | 4  | 3  | 2  | 1  | 0  |
+    // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
+    // | i  | x  | x  | a  | c1 | c2 | c3 | c4 | c5 | c6 | d1 | d2 | d3 | j1 | j2 | j3 |
+    // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
+
+    // if instruction[15] is 1 then this instruction is A instruction.
+    // so, when the instruction type is A, isAInstruction = 1.
+    Not(in=instruction[15], out=isAInstruction); 
+
+    // when the instruction type is C, isCInstruction = 1.
+    Not(in=isAInstruction, out=isCInstruction);
+
+    // if instruction[5] is 1, this instruction is storing data into A register.
+    // if instruction[4] is 1, this instruction is storing data into D register.
+    // if instruction[3] is 1, this instruction is storing data into Memory[A].
+
+    //   d1    d2   d3                          Meaning                                                               
+    //  ---- ----- ----- ------------------------------------------------------
+    //    0     0     0   Do Nothing.                                                                                 
+    //    0     0     1   Store data into Memory[A]                                                                   
+    //    0     1     0   Store data into D register                                                                  
+    //    0     1     1   Store data into Memory[A] & D register                                                      
+    //    1     0     0   Store data into A register                                                                  
+    //    1     0     1   Store data into A register & Memory[A]                                                      
+    //    1     1     0   Store data into A register & D register                                                     
+    //    1     1     1   Store data into A register & D register & Memory[A]                                         
+
+    // if the instruction is type C AND instruction[5] is 1, then the data will be stored to A register
+    And(a=isCInstruction, b=instruction[5], out=storeToAFlag); 
+    Mux16(a=instruction, b=ALUResult, sel=storeToAFlag, out=ARegion);
+
+    Or(a=isAInstruction, b=storeToAFlag, out=loadToA);
+    ARegister(in=ARegion, load=loadToA, out=Aout);
+
+    // if instruction[12] is 0, use the value that A register has as operand,
+    // else use it as memory address.
+    Mux16(a=Aout, b=inM, sel=instruction[12], out=AMout);
+
+    And(a=isCInstruction, b=instruction[4], out=loadToD);
+    DRegister(in=ALUResult, load=loadToD, out=Dout);
+
+    //   a   c1   c2   c3   c4   c5   c6   mnemonic  
+    //  --- ---- ---- ---- ---- ---- ---- ---------- 
+    //   0    1    0    1    0    1    0   0        
+    //   0    1    1    1    1    1    1   1        
+    //   0    1    1    1    0    1    0   -1       
+    //   0    0    0    1    1    0    0   D        
+    //   0    1    1    0    0    0    0   A        
+    //   0    0    0    1    1    0    1   !D       
+    //   0    1    1    0    0    0    1   !A       
+    //   0    0    0    1    1    1    1   -D       
+    //   0    1    1    0    0    1    1   -A       
+    //   0    0    1    1    1    1    1   D+1      
+    //   0    1    1    0    1    1    1   A+1      
+    //   0    0    0    1    1    1    0   D-1      
+    //   0    1    1    0    0    1    0   A-1      
+    //   0    0    0    0    0    1    0   D+A      
+    //   0    0    1    0    0    1    1   D-A      
+    //   0    0    0    0    1    1    1   A-D      
+    //   0    0    0    0    0    0    0   D&A      
+    //   0    0    1    0    1    0    1   D|A      
+    //   1    1    0    1    0    1    0   ######      
+    //   1    1    1    1    1    1    1   ######      
+    //   1    1    1    1    0    1    0   ######      
+    //   1    0    0    1    1    0    0   ######      
+    //   1    1    1    0    0    0    0   M[A]     
+    //   1    0    0    1    1    0    1   ######      
+    //   1    1    1    0    0    0    1   !M[A]    
+    //   1    0    0    1    1    1    1   ######      
+    //   1    1    1    0    0    1    1   -M[A]    
+    //   1    0    1    1    1    1    1   #####      
+    //   1    1    1    0    1    1    1   M[A]+1   
+    //   1    0    0    1    1    1    0   ######      
+    //   1    1    1    0    0    1    0   M[A]-1   
+    //   1    0    0    0    0    1    0   D+M[A]   
+    //   1    0    1    0    0    1    1   D-M[A]   
+    //   1    0    0    0    1    1    1   M[A]-D     
+    //   1    0    0    0    0    0    0   D&M[A]   
+    //   1    0    1    0    1    0    1   D|M[A]   
+
+    ALU(x=Dout, y=AMout, 
+        zx=instruction[11], nx=instruction[10], 
+        zy=instruction[9], ny=instruction[8], 
+        f=instruction[7], no=instruction[6], 
+        out=ALUResult, 
+        zr=isALUResultZero, ng=isALUResultNegative);
+
+    And16(a=true, b=Aout, out[0..14]=addressM); // use only [0..14]
+    And16(a=true, b=ALUResult, out=outM);
+    And(a=isCInstruction, b=instruction[3], out=writeM);
+
+    //   j1   j2   j3   mnemonic       meaning       
+    //  ---- ---- ---- ---------- ------------------ 
+    //    0    0    0   null       NO JUMP           
+    //    0    0    1   JGT        IF out > 0 JUMP   
+    //    0    1    0   JEQ        IF out = 0 JUMP   
+    //    0    1    1   JGE        IF out >= 0 JUMP  
+    //    1    0    0   JLT        IF out < 0 JUMP   
+    //    1    0    1   JNE        IF out != 0 JUMP  
+    //    1    1    0   JLE        IF out <= 0 JUMP  
+    //    1    1    1   JMP        JUMP              
+
+    And(a=isALUResultZero, b=instruction[1], out=jumpEqualFlag);
+    And(a=isALUResultNegative, b=instruction[2], out=jumpLessThanFlag);
+    Or(a=isALUResultZero, b=isALUResultNegative, out=isALUResultZeroOrNegative);
+    Not(in=isALUResultZeroOrNegative, out=isALUResultPositive);
+    And(a=isALUResultPositive, b=instruction[0], out=jumpGreaterThanFlag);
+    Or(a=jumpEqualFlag, b=jumpLessThanFlag, out=jumpLessOrEqualFlag);
+    Or(a=jumpLessOrEqualFlag, b=jumpGreaterThanFlag, out=jumpToAFlag);
+    And(a=isCInstruction, b=jumpToAFlag, out=loadToPCFlag);
+    Not(in=loadToPCFlag, out=incrementPCFlag);
+    PC(in=Aout, inc=incrementPCFlag, load=loadToPCFlag, reset=reset, out[0..14]=pc);
 }
